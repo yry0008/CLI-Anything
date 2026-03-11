@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 CLI-Anything Native Skill Manager
-Helper script for managing the skill and virtual environment.
+Helper script for managing the skill, virtual environment, and CLI wrappers.
 """
 
 import json
@@ -16,6 +16,11 @@ def get_skill_dir():
     return Path.home() / ".openclaw" / "workspace" / "skills" / "cli-anything-native"
 
 
+def get_local_bin():
+    """Get the user local bin directory."""
+    return Path.home() / ".local" / "bin"
+
+
 def get_config():
     """Read skill configuration."""
     config_file = get_skill_dir() / "skill-config.json"
@@ -27,18 +32,17 @@ def get_config():
 
 def get_venv_path():
     """Get the virtual environment path."""
+    # Default: skill-dir/.venv
+    default_venv = get_skill_dir() / ".venv"
+    
+    # Check config
     config = get_config()
     if config and "venv_path" in config:
-        return Path(config["venv_path"])
+        venv_path = Path(config["venv_path"])
+        if venv_path.exists():
+            return venv_path
     
-    # Try to find venv in CLI-Anything repo
-    skill_dir = get_skill_dir()
-    repo_dir = skill_dir.parent.parent.parent  # skills/ -> workspace/ -> .openclaw/ -> home
-    venv_path = repo_dir / "CLI-Anything" / ".venv"
-    if venv_path.exists():
-        return venv_path
-    
-    return None
+    return default_venv if default_venv.exists() else None
 
 
 def has_uv():
@@ -54,6 +58,150 @@ def get_package_manager():
     return "pip"
 
 
+def get_cli_commands():
+    """Get list of available cli-anything-* commands in venv."""
+    venv_path = get_venv_path()
+    if not venv_path:
+        return []
+    
+    bin_dir = venv_path / "bin"
+    if not bin_dir.exists():
+        return []
+    
+    commands = []
+    for cmd in bin_dir.glob("cli-anything-*"):
+        if cmd.is_file():
+            commands.append(cmd.name)
+    return sorted(commands)
+
+
+def create_wrapper(cmd_name):
+    """Create a wrapper script for a CLI command."""
+    venv_path = get_venv_path()
+    local_bin = get_local_bin()
+    
+    if not venv_path:
+        print("Error: Virtual environment not found", file=sys.stderr)
+        return False
+    
+    wrapper_path = local_bin / cmd_name
+    
+    wrapper_content = f'''#!/bin/bash
+# Auto-generated wrapper for {cmd_name}
+# Source: CLI-Anything Native Skill
+# Venv: {venv_path}
+
+export PATH="{venv_path}/bin:$PATH"
+export VIRTUAL_ENV="{venv_path}"
+
+if [ ! -f "{venv_path}/bin/{cmd_name}" ]; then
+    echo "Error: {cmd_name} not found in virtual environment" >&2
+    echo "Please reinstall the skill: ./install.sh" >&2
+    exit 1
+fi
+
+exec "{venv_path}/bin/{cmd_name}" "$@"
+'''
+    
+    wrapper_path.write_text(wrapper_content)
+    wrapper_path.chmod(0o755)
+    return True
+
+
+def remove_wrapper(cmd_name):
+    """Remove a wrapper script."""
+    local_bin = get_local_bin()
+    wrapper_path = local_bin / cmd_name
+    
+    if wrapper_path.exists():
+        # Check if it's our wrapper
+        try:
+            content = wrapper_path.read_text()
+            if "CLI-Anything Native Skill" in content:
+                wrapper_path.unlink()
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def link_commands():
+    """Create wrapper scripts for all cli-anything-* commands."""
+    commands = get_cli_commands()
+    if not commands:
+        print("No cli-anything-* commands found in venv.")
+        print("Build some CLIs first using the skill!")
+        return 0
+    
+    local_bin = get_local_bin()
+    local_bin.mkdir(parents=True, exist_ok=True)
+    
+    print(f"Creating wrapper scripts in {local_bin}...")
+    created = 0
+    skipped = 0
+    
+    for cmd in commands:
+        wrapper_path = local_bin / cmd
+        if wrapper_path.exists():
+            # Check if it's our wrapper
+            try:
+                content = wrapper_path.read_text()
+                if "CLI-Anything Native Skill" in content:
+                    print(f"  ✓ {cmd} (already exists)")
+                    skipped += 1
+                    continue
+                else:
+                    print(f"  ⚠️  {cmd} (exists but not ours, skipping)")
+                    continue
+            except Exception:
+                print(f"  ⚠️  {cmd} (cannot read, skipping)")
+                continue
+        
+        if create_wrapper(cmd):
+            print(f"  ✅ {cmd}")
+            created += 1
+        else:
+            print(f"  ❌ {cmd}")
+    
+    print(f"\nSummary: {created} created, {skipped} already existed")
+    
+    # Check PATH
+    path_str = os.environ.get("PATH", "")
+    if str(local_bin) not in path_str:
+        print(f"\n⚠️  Warning: {local_bin} is not in your PATH")
+        print("Add this to your shell config:")
+        print(f'  export PATH="$HOME/.local/bin:$PATH"')
+    
+    return 0
+
+
+def unlink_commands():
+    """Remove all cli-anything-* wrapper scripts."""
+    local_bin = get_local_bin()
+    
+    if not local_bin.exists():
+        print(f"{local_bin} does not exist")
+        return 0
+    
+    print(f"Removing wrapper scripts from {local_bin}...")
+    removed = 0
+    not_found = 0
+    
+    for cmd in get_cli_commands():
+        wrapper_path = local_bin / cmd
+        if wrapper_path.exists():
+            if remove_wrapper(cmd):
+                print(f"  ✅ Removed: {cmd}")
+                removed += 1
+            else:
+                print(f"  ⚠️  Skipped: {cmd} (not ours)")
+        else:
+            not_found += 1
+    
+    print(f"\nSummary: {removed} removed")
+    return 0
+
+
 def activate_venv():
     """Print activation command for the venv."""
     venv_path = get_venv_path()
@@ -62,7 +210,7 @@ def activate_venv():
         print(f"source {activate_script}")
         return 0
     else:
-        print(f"Virtual environment not found at: {venv_path}", file=sys.stderr)
+        print(f"Virtual environment not found", file=sys.stderr)
         print("Run ./install.sh first to create the venv.", file=sys.stderr)
         return 1
 
@@ -160,23 +308,49 @@ def show_status():
                 if result.returncode == 0:
                     print(f"  Version: {result.stdout.strip()}")
             
-            # Check installed packages
-            if python_path.exists():
-                result = subprocess.run(
-                    [str(python_path), "-m", "pip", "list"],
-                    capture_output=True,
-                    text=True
-                )
-                if result.returncode == 0:
-                    print(f"\nInstalled packages (venv):")
-                    lines = result.stdout.strip().split("\n")[2:]  # Skip header
-                    for line in lines[:10]:  # Show first 10 packages
-                        if line.strip():
-                            print(f"    {line}")
-                    if len(lines) > 10:
-                        print(f"    ... and {len(lines) - 10} more")
+            # List CLI commands
+            commands = get_cli_commands()
+            if commands:
+                print(f"\nInstalled CLI tools ({len(commands)}):")
+                for cmd in commands[:10]:  # Show first 10
+                    print(f"    - {cmd}")
+                if len(commands) > 10:
+                    print(f"    ... and {len(commands) - 10} more")
+            else:
+                print(f"\nNo CLI tools installed yet")
+                print("  Run: cli-anything-build <software> to create one")
     else:
         print("\nVirtual environment: Not configured")
+    
+    # Check wrappers
+    local_bin = get_local_bin()
+    if local_bin.exists():
+        wrappers = list(local_bin.glob("cli-anything-*"))
+        our_wrappers = []
+        for w in wrappers:
+            try:
+                content = w.read_text()
+                if "CLI-Anything Native Skill" in content:
+                    our_wrappers.append(w.name)
+            except Exception:
+                pass
+        
+        if our_wrappers:
+            print(f"\nWrapper scripts in {local_bin}:")
+            for w in our_wrappers[:10]:
+                print(f"    - {w}")
+            if len(our_wrappers) > 10:
+                print(f"    ... and {len(our_wrappers) - 10} more")
+        else:
+            print(f"\nNo wrapper scripts found in {local_bin}")
+            print("  Run: skill-manager link")
+    
+    # Check PATH
+    path_str = os.environ.get("PATH", "")
+    if str(local_bin) not in path_str:
+        print(f"\n⚠️  Warning: {local_bin} is not in your PATH")
+        print("  Add this to your shell config:")
+        print(f'    export PATH="$HOME/.local/bin:$PATH"')
     
     return 0
 
@@ -192,6 +366,8 @@ def main():
         print("  python          Print path to venv Python")
         print("  run <cmd>       Run command in venv")
         print("  install <pkg>   Install package in venv")
+        print("  link            Create wrapper scripts in ~/.local/bin")
+        print("  unlink          Remove wrapper scripts from ~/.local/bin")
         print("")
         print("Environment:")
         print(f"  uv available: {has_uv()}")
@@ -224,6 +400,10 @@ def main():
             print("Usage: skill-manager install <package>", file=sys.stderr)
             return 1
         return install_packages(*sys.argv[2:])
+    elif command == "link":
+        return link_commands()
+    elif command == "unlink":
+        return unlink_commands()
     else:
         print(f"Unknown command: {command}", file=sys.stderr)
         return 1

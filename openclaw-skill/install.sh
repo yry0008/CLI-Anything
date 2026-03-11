@@ -2,7 +2,7 @@
 # Install CLI-Anything Native skill for OpenClaw
 # Usage: ./install.sh [venv_path]
 #   venv_path: Optional path to Python virtual environment
-#              Default: <cli-anything-repo>/.venv
+#              Default: <skill-dir>/.venv
 
 set -e
 
@@ -12,8 +12,11 @@ CLI_ANYTHING_REPO="$(dirname "$SKILL_DIR")"
 # Target directory in OpenClaw workspace
 TARGET_DIR="${HOME}/.openclaw/workspace/skills/cli-anything-native"
 
-# Virtual environment path (default: repo/.venv)
-VENV_PATH="${1:-$CLI_ANYTHING_REPO/.venv}"
+# Virtual environment path (default: skill-dir/.venv)
+VENV_PATH="${1:-$TARGET_DIR/.venv}"
+
+# User local bin directory
+LOCAL_BIN="${HOME}/.local/bin"
 
 # Python version
 PYTHON_VERSION="3.12"
@@ -25,6 +28,7 @@ echo ""
 echo "Skill source: $SKILL_DIR"
 echo "Install target: $TARGET_DIR"
 echo "Virtual env: $VENV_PATH"
+echo "Local bin: $LOCAL_BIN"
 echo "Python version: $PYTHON_VERSION"
 echo ""
 
@@ -39,8 +43,9 @@ else
 fi
 echo ""
 
-# Create skills directory if not exists
+# Create directories
 mkdir -p "$(dirname "$TARGET_DIR")"
+mkdir -p "$LOCAL_BIN"
 
 # Remove existing installation if present
 if [ -e "$TARGET_DIR" ]; then
@@ -106,16 +111,50 @@ else
     fi
 fi
 
-# Create activation helper script
-cat > "$TARGET_DIR/activate-venv" << EOF
+# Create wrapper scripts for cli-anything-* commands
+echo ""
+echo "🔗 Creating wrapper scripts in $LOCAL_BIN..."
+
+create_wrapper() {
+    local cmd_name=$1
+    local wrapper_path="$LOCAL_BIN/$cmd_name"
+    
+    cat > "$wrapper_path" << EOF
 #!/bin/bash
-# Activate the CLI-Anything virtual environment
-source "$VENV_PATH/bin/activate"
-echo "✅ Virtual environment activated: $VENV_PATH"
-echo "Python: \$(which python3) (\$(python3 --version))"
-echo "Pip: \$(which pip)"
+# Auto-generated wrapper for $cmd_name
+# Source: CLI-Anything Native Skill
+# Venv: $VENV_PATH
+
+export PATH="$VENV_PATH/bin:\$PATH"
+export VIRTUAL_ENV="$VENV_PATH"
+
+if [ ! -f "$VENV_PATH/bin/$cmd_name" ]; then
+    echo "Error: $cmd_name not found in virtual environment" >&2
+    echo "Please reinstall the skill: ./install.sh" >&2
+    exit 1
+fi
+
+exec "$VENV_PATH/bin/$cmd_name" "\$@"
 EOF
-chmod +x "$TARGET_DIR/activate-venv"
+    chmod +x "$wrapper_path"
+    echo "  ✅ $cmd_name"
+}
+
+# Create wrappers for existing cli-anything-* commands
+wrapper_count=0
+if [ -d "$VENV_PATH/bin" ]; then
+    for cmd in "$VENV_PATH"/bin/cli-anything-*; do
+        if [ -f "$cmd" ]; then
+            cmd_name=$(basename "$cmd")
+            create_wrapper "$cmd_name"
+            ((wrapper_count++))
+        fi
+    done
+fi
+
+if [ $wrapper_count -eq 0 ]; then
+    echo "  ℹ️  No cli-anything-* commands found yet (will be created when you build CLIs)"
+fi
 
 # Create skill configuration
 cat > "$TARGET_DIR/skill-config.json" << EOF
@@ -126,11 +165,34 @@ cat > "$TARGET_DIR/skill-config.json" << EOF
   "python_version": "$PYTHON_VERSION",
   "use_uv": $USE_UV,
   "cli_anything_repo": "$CLI_ANYTHING_REPO",
+  "local_bin": "$LOCAL_BIN",
   "install_date": "$(date -Iseconds)"
 }
 EOF
 
+# Create activation helper script (for direct venv access)
+cat > "$TARGET_DIR/activate-venv" << EOF
+#!/bin/bash
+# Activate the CLI-Anything virtual environment directly
+source "$VENV_PATH/bin/activate"
+echo "✅ Virtual environment activated: $VENV_PATH"
+echo "Python: \$(which python3) (\$(python3 --version))"
+EOF
+chmod +x "$TARGET_DIR/activate-venv"
+
+# Check if ~/.local/bin is in PATH
 echo ""
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* && ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
+    echo "⚠️  Warning: ~/.local/bin is not in your PATH"
+    echo ""
+    echo "To use the CLI commands, add this to your shell config:"
+    echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+    echo ""
+    echo "Or run this command now:"
+    echo "  export PATH=\"$LOCAL_BIN:\$PATH\""
+    echo ""
+fi
+
 echo "══════════════════════════════════════════════════════════════════"
 echo "  ✅ CLI-Anything Native skill installed successfully!"
 echo "══════════════════════════════════════════════════════════════════"
@@ -138,6 +200,7 @@ echo ""
 echo "📍 Installation Summary:"
 echo "   Skill: $TARGET_DIR"
 echo "   Venv:  $VENV_PATH"
+echo "   Wrappers: $LOCAL_BIN/cli-anything-*"
 echo "   Python: $PYTHON_VERSION"
 if [ "$USE_UV" = true ]; then
     echo "   Package Manager: uv"
@@ -146,14 +209,17 @@ else
 fi
 echo ""
 echo "🔧 Usage:"
-echo "   1. Activate venv: source $TARGET_DIR/activate-venv"
-echo "   2. Or directly: $VENV_PATH/bin/python <script>"
-echo "   3. Skill manager: $TARGET_DIR/skill-manager.py status"
+echo "   CLI commands: cli-anything-<software> <args>"
+echo "   Direct venv:  source $TARGET_DIR/activate-venv"
+echo "   Manager:      $TARGET_DIR/skill-manager.py status"
 echo ""
-echo "💡 You can now use commands like:"
+echo "💡 Quick start:"
 echo "   '为 GIMP 生成 CLI 工具'"
 echo "   '使用 CLI-Anything 为 https://github.com/blender/blender 创建 CLI'"
 echo ""
-echo "📖 For custom venv location, use:"
-echo "   ./install.sh /path/to/venv"
-echo ""
+
+# Print PATH reminder if needed
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* && ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
+    echo "⚠️  Remember to add ~/.local/bin to your PATH!"
+    echo ""
+fi
