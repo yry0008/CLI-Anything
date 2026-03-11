@@ -34,6 +34,40 @@ description: Native OpenClaw integration for CLI-Anything - automatically genera
 | Phase 6 | AI 文档 | `exec: pytest` 更新文档 |
 | Phase 7 | AI 发布 | `exec: pip install -e .` |
 
+## 安装
+
+### 安装位置
+
+Skill 应安装在：`~/.openclaw/workspace/skills/cli-anything-native`
+
+### 安装方式
+
+```bash
+cd /path/to/CLI-Anything/openclaw-skill
+./install.sh              # 使用默认 venv 位置 (CLI-Anything/.venv)
+./install.sh /custom/venv # 指定自定义 venv 路径
+```
+
+安装脚本会自动：
+1. 复制 skill 文件到 `~/.openclaw/workspace/skills/cli-anything-native`
+2. 创建 Python 虚拟环境（如果不存在）
+3. 安装依赖包（click, prompt-toolkit, pytest）
+4. 生成 venv 激活脚本
+
+### 虚拟环境
+
+**为什么使用 venv？**
+- 隔离依赖，不影响系统 Python
+- 明确的依赖版本控制
+- 避免权限冲突
+
+**默认 venv 位置**：`CLI-Anything 仓库目录/.venv`
+
+**激活 venv**：
+```bash
+source ~/.openclaw/workspace/skills/cli-anything-native/activate-venv
+```
+
 ## 使用方法
 
 ### 方式 1：完整 7 阶段（推荐）
@@ -187,12 +221,19 @@ description: Native OpenClaw integration for CLI-Anything - automatically genera
 **目标**：本地安装并验证
 
 **执行步骤**：
-1. `exec: pip install -e .` - 可编辑模式安装
-2. `exec: which cli-anything-<software>` - 验证 PATH
-3. `exec: cli-anything-<software> --help` - 验证 CLI 可用
+1. 激活虚拟环境（如果配置了）
+2. `exec: pip install -e .` - 可编辑模式安装
+3. `exec: which cli-anything-<software>` - 验证 PATH
+4. `exec: cli-anything-<software> --help` - 验证 CLI 可用
+
+**注意**：使用虚拟环境时，确保在执行 pip 安装前已激活 venv：
+```bash
+source /path/to/venv/bin/activate
+pip install -e .
+```
 
 **输出**：
-- 可用的 CLI 命令
+- 可用的 CLI 命令（安装在 venv 的 bin 目录中）
 
 ## 核心原则（来自 HARNESS.md）
 

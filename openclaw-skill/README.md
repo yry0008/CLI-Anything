@@ -9,20 +9,76 @@
 - ✅ **完全兼容**：生成的 CLI 与 CLI-Anything 标准一致
 - ✅ **可分阶段**：支持分阶段执行，便于调试
 - ✅ **并行加速**：使用 subagents 加速多阶段任务
+- ✅ **Python 虚拟环境**：自动创建和管理 venv，避免污染系统环境
 
 ## 安装
 
-将此目录复制到你的 OpenClaw skills 目录：
+### 方式 1：使用安装脚本（推荐）
 
 ```bash
-cp -r openclaw-skill ~/.openclaw/skills/cli-anything-native
+cd /path/to/CLI-Anything/openclaw-skill
+./install.sh
 ```
 
-或使用软链接（开发模式）：
+这将：
+1. 安装 skill 到 `~/.openclaw/workspace/skills/cli-anything-native`
+2. 在 `CLI-Anything/.venv` 创建 Python 虚拟环境
+3. 安装所需依赖 (click, prompt-toolkit, pytest)
+
+### 方式 2：指定自定义 venv 路径
 
 ```bash
-ln -s $(pwd)/openclaw-skill ~/.openclaw/skills/cli-anything-native
+./install.sh /path/to/your/venv
 ```
+
+### 方式 3：手动安装
+
+```bash
+# 创建目录
+mkdir -p ~/.openclaw/workspace/skills
+
+# 复制 skill
+cp -r openclaw-skill ~/.openclaw/workspace/skills/cli-anything-native
+
+# 创建虚拟环境（推荐）
+cd /path/to/CLI-Anything
+python3 -m venv .venv
+source .venv/bin/activate
+pip install click prompt-toolkit pytest pytest-cov
+```
+
+### 方式 4：软链接（开发模式）
+
+```bash
+ln -s $(pwd)/openclaw-skill ~/.openclaw/workspace/skills/cli-anything-native
+```
+
+## 虚拟环境管理
+
+### 激活虚拟环境
+
+```bash
+# 方式 1：使用生成的激活脚本
+source ~/.openclaw/workspace/skills/cli-anything-native/activate-venv
+
+# 方式 2：直接使用 venv
+source /path/to/CLI-Anything/.venv/bin/activate
+```
+
+### 虚拟环境位置
+
+| 安装方式 | 默认 venv 位置 |
+|---------|--------------|
+| `./install.sh` | `CLI-Anything/.venv` |
+| `./install.sh /custom/path` | `/custom/path` |
+| 手动 | 用户指定 |
+
+### 为什么要用 venv？
+
+1. **隔离依赖**：不影响系统 Python 环境
+2. **版本控制**：可以为不同项目使用不同依赖版本
+3. **安全**：避免权限问题和系统包冲突
+4. **可复现**：明确依赖版本，便于部署
 
 ## 使用方法
 
@@ -54,6 +110,9 @@ ln -s $(pwd)/openclaw-skill ~/.openclaw/skills/cli-anything-native
 openclaw-skill/
 ├── SKILL.md                      # 主技能文档
 ├── README.md                     # 本文件
+├── install.sh                    # 安装脚本（支持 venv）
+├── activate-venv                 # 生成的 venv 激活脚本
+├── skill-config.json             # 技能配置（包含 venv 路径）
 ├── references/
 │   ├── HARNESS.md               # CLI-Anything 方法论
 │   └── quick-reference.md       # 快速参考
@@ -84,6 +143,7 @@ openclaw-skill/
 | 调试 | 较难 | 容易 |
 | 分阶段 | 困难 | 容易 |
 | 并行 | 受限 | 支持 subagents |
+| Python 环境 | 依赖外部 | 自带 venv |
 
 ## 上游仓库
 
