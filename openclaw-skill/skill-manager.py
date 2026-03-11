@@ -41,6 +41,19 @@ def get_venv_path():
     return None
 
 
+def has_uv():
+    """Check if uv is available."""
+    return subprocess.run(["which", "uv"], capture_output=True).returncode == 0
+
+
+def get_package_manager():
+    """Get the package manager (uv or pip)."""
+    config = get_config()
+    if config and config.get("use_uv", False):
+        return "uv"
+    return "pip"
+
+
 def activate_venv():
     """Print activation command for the venv."""
     venv_path = get_venv_path()
@@ -64,7 +77,7 @@ def get_python_path():
     return None
 
 
-def run_in_venv(command):
+def run_in_venv(command, use_uv=None):
     """Run a command in the virtual environment."""
     python_path = get_python_path()
     if not python_path:
@@ -75,14 +88,37 @@ def run_in_venv(command):
     env["PATH"] = str(python_path.parent) + ":" + env.get("PATH", "")
     env["VIRTUAL_ENV"] = str(get_venv_path())
     
+    # Check if we should use uv
+    if use_uv is None:
+        use_uv = has_uv() and get_package_manager() == "uv"
+    
+    if use_uv and has_uv():
+        # Use uv for the command if it's a pip command
+        if command.startswith("pip "):
+            command = "uv " + command[4:]
+        elif command.startswith("python3 -m pip "):
+            command = "uv " + command[15:]
+    
     result = subprocess.run(command, shell=True, env=env)
     return result.returncode
+
+
+def install_packages(*packages):
+    """Install packages in the virtual environment."""
+    if has_uv() and get_package_manager() == "uv":
+        venv_path = get_venv_path()
+        cmd = f"uv pip install --python {venv_path}/bin/python {' '.join(packages)}"
+    else:
+        python_path = get_python_path()
+        cmd = f"{python_path} -m pip install {' '.join(packages)}"
+    
+    return run_in_venv(cmd)
 
 
 def show_status():
     """Show skill status."""
     print("CLI-Anything Native Skill Status")
-    print("=" * 50)
+    print("=" * 60)
     
     skill_dir = get_skill_dir()
     print(f"Skill directory: {skill_dir}")
@@ -92,7 +128,16 @@ def show_status():
     if config:
         print(f"\nConfiguration:")
         for key, value in config.items():
-            print(f"  {key}: {value}")
+            if key == "install_date":
+                print(f"  {key}: {value}")
+            else:
+                print(f"  {key}: {value}")
+    
+    # Check uv availability
+    print(f"\nPackage Manager:")
+    print(f"  uv available: {has_uv()}")
+    if config:
+        print(f"  Configured to use: {get_package_manager()}")
     
     venv_path = get_venv_path()
     if venv_path:
@@ -105,17 +150,31 @@ def show_status():
             print(f"  Python: {python_path}")
             print(f"  Python exists: {python_path.exists()}")
             
+            if python_path.exists():
+                # Get Python version
+                result = subprocess.run(
+                    [str(python_path), "--version"],
+                    capture_output=True,
+                    text=True
+                )
+                if result.returncode == 0:
+                    print(f"  Version: {result.stdout.strip()}")
+            
             # Check installed packages
-            result = subprocess.run(
-                [str(python_path), "-m", "pip", "list"],
-                capture_output=True,
-                text=True
-            )
-            if result.returncode == 0:
-                print(f"\nInstalled packages (venv):")
-                for line in result.stdout.split("\n")[2:10]:  # Show first few packages
-                    if line.strip():
-                        print(f"    {line}")
+            if python_path.exists():
+                result = subprocess.run(
+                    [str(python_path), "-m", "pip", "list"],
+                    capture_output=True,
+                    text=True
+                )
+                if result.returncode == 0:
+                    print(f"\nInstalled packages (venv):")
+                    lines = result.stdout.strip().split("\n")[2:]  # Skip header
+                    for line in lines[:10]:  # Show first 10 packages
+                        if line.strip():
+                            print(f"    {line}")
+                    if len(lines) > 10:
+                        print(f"    ... and {len(lines) - 10} more")
     else:
         print("\nVirtual environment: Not configured")
     
@@ -128,10 +187,17 @@ def main():
         print("Usage: skill-manager <command>")
         print("")
         print("Commands:")
-        print("  status      Show skill and venv status")
-        print("  activate    Print venv activation command")
-        print("  python      Print path to venv Python")
-        print("  run <cmd>   Run command in venv")
+        print("  status          Show skill and venv status")
+        print("  activate        Print venv activation command")
+        print("  python          Print path to venv Python")
+        print("  run <cmd>       Run command in venv")
+        print("  install <pkg>   Install package in venv")
+        print("")
+        print("Environment:")
+        print(f"  uv available: {has_uv()}")
+        config = get_config()
+        if config:
+            print(f"  Using: {get_package_manager()}")
         return 1
     
     command = sys.argv[1]
@@ -153,6 +219,11 @@ def main():
             print("Usage: skill-manager run <command>", file=sys.stderr)
             return 1
         return run_in_venv(" ".join(sys.argv[2:]))
+    elif command == "install":
+        if len(sys.argv) < 3:
+            print("Usage: skill-manager install <package>", file=sys.stderr)
+            return 1
+        return install_packages(*sys.argv[2:])
     else:
         print(f"Unknown command: {command}", file=sys.stderr)
         return 1

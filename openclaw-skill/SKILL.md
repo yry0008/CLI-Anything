@@ -50,14 +50,22 @@ cd /path/to/CLI-Anything/openclaw-skill
 
 安装脚本会自动：
 1. 复制 skill 文件到 `~/.openclaw/workspace/skills/cli-anything-native`
-2. 创建 Python 虚拟环境（如果不存在）
+2. 创建 **Python 3.12** 虚拟环境（如果不存在）
 3. 安装依赖包（click, prompt-toolkit, pytest）
 4. 生成 venv 激活脚本
 
+**uv 支持**：如果系统安装了 [uv](https://github.com/astral-sh/uv)，会自动使用 uv 管理环境（比 pip 快 10-100 倍）
+
 ### 虚拟环境
+
+**venv 位置**：默认 `CLI-Anything/.venv`，可自定义
+
+**Python 版本**：默认 3.12，确保最佳兼容性
 
 **为什么使用 venv？**
 - 隔离依赖，不影响系统 Python
+- Python 3.12 特性支持
+- uv 支持（如果使用）
 - 明确的依赖版本控制
 - 避免权限冲突
 

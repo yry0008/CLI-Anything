@@ -10,6 +10,8 @@
 - ✅ **可分阶段**：支持分阶段执行，便于调试
 - ✅ **并行加速**：使用 subagents 加速多阶段任务
 - ✅ **Python 虚拟环境**：自动创建和管理 venv，避免污染系统环境
+- ✅ **uv 支持**：如果系统安装了 uv，自动使用 uv 管理环境（更快）
+- ✅ **Python 3.12**：默认使用 Python 3.12，确保最佳兼容性
 
 ## 安装
 
@@ -22,8 +24,10 @@ cd /path/to/CLI-Anything/openclaw-skill
 
 这将：
 1. 安装 skill 到 `~/.openclaw/workspace/skills/cli-anything-native`
-2. 在 `CLI-Anything/.venv` 创建 Python 虚拟环境
+2. 在 `CLI-Anything/.venv` 创建 Python 3.12 虚拟环境
 3. 安装所需依赖 (click, prompt-toolkit, pytest)
+
+**如果系统安装了 uv**，会自动使用 uv（比标准 pip 快 10-100 倍）
 
 ### 方式 2：指定自定义 venv 路径
 
@@ -31,7 +35,25 @@ cd /path/to/CLI-Anything/openclaw-skill
 ./install.sh /path/to/your/venv
 ```
 
-### 方式 3：手动安装
+### 方式 3：使用 uv 安装（最快）
+
+如果你已经安装了 [uv](https://github.com/astral-sh/uv)：
+
+```bash
+# install.sh 会自动检测并使用 uv
+./install.sh
+
+# 或者手动使用 uv
+uv venv CLI-Anything/.venv --python 3.12
+uv pip install --python CLI-Anything/.venv/bin/python click prompt-toolkit pytest
+```
+
+uv 的优势：
+- 比 pip 快 10-100 倍
+- 自动管理 Python 版本
+- 并行下载和安装
+
+### 方式 4：手动安装
 
 ```bash
 # 创建目录
@@ -47,7 +69,7 @@ source .venv/bin/activate
 pip install click prompt-toolkit pytest pytest-cov
 ```
 
-### 方式 4：软链接（开发模式）
+### 方式 5：软链接（开发模式）
 
 ```bash
 ln -s $(pwd)/openclaw-skill ~/.openclaw/workspace/skills/cli-anything-native
@@ -78,6 +100,18 @@ source /path/to/CLI-Anything/.venv/bin/activate
 1. **隔离依赖**：不影响系统 Python 环境
 2. **版本控制**：可以为不同项目使用不同依赖版本
 3. **安全**：避免权限问题和系统包冲突
+4. **Python 3.12**：使用最新的 Python 特性
+
+### uv vs pip
+
+| 特性 | uv | pip |
+|------|-----|-----|
+| 速度 | ⚡ 10-100x 更快 | 🐢 标准速度 |
+| Python 管理 | ✅ 内置 | ❌ 需单独安装 |
+| 兼容性 | ✅ 兼容 pip | - 标准 |
+| 安装 | `cargo install uv` | 预装 |
+
+推荐使用 uv：`curl -LsSf https://astral.sh/uv/install.sh | sh`
 4. **可复现**：明确依赖版本，便于部署
 
 ## 使用方法
